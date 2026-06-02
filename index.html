@@ -15,7 +15,7 @@
     --abyss:#041B38; --ocean:#072a52; --ocean-2:#0a3260; --reef:#0e3a6b;
     --foam:#F8C11E; --foam-dim:#c99a17; --brass:#D9A521; --brass-2:#ffd45e;
     --sand:#eef3f8; --ink:#eef3f8; --muted:#9fb0c4; --line:rgba(255,255,255,.12);
-    --coral:#c25a45; --amber:#9fb0c4; --lime:#d9a521; --green:#F8C11E;
+    --red:#E0452E; --lblue:#57B6E6; --grn:#45B86A;
     --glass:rgba(4,18,38,.82);
     --shadow:0 18px 50px -18px rgba(0,0,0,.75);
     font-size:16px;
@@ -145,7 +145,7 @@
   .legend{position:absolute;z-index:1000;right:.9rem;bottom:1rem;background:var(--glass);border:1px solid var(--line);
     border-radius:12px;padding:.55rem .7rem;backdrop-filter:blur(12px);box-shadow:var(--shadow);font-size:.7rem;color:var(--muted)}
   .legend .bar{height:8px;border-radius:6px;margin:.35rem 0 .25rem;
-    background:linear-gradient(90deg,var(--coral),var(--amber),var(--lime),var(--green))}
+    background:linear-gradient(90deg,var(--red),var(--lblue),var(--grn),var(--gold))}
   .legend .ends{display:flex;justify-content:space-between}
   .toast{position:absolute;z-index:1200;left:50%;top:4.7rem;transform:translateX(-50%);
     background:var(--glass);border:1px solid var(--line);border-radius:11px;padding:.5rem .9rem;font-size:.82rem;
@@ -240,6 +240,7 @@
 <div class="layers" id="layersPanel">
   <h4 id="layersToggle">Map Layers<span class="chev">▾</span></h4>
   <div class="opts">
+    <label class="lrow"><input type="checkbox" id="ly_heat" checked><span class="tog"></span>Bite Heatmap (now)</label>
     <label class="lrow"><input type="checkbox" id="ly_spots" checked><span class="tog"></span>Fishing Spots</label>
     <label class="lrow"><input type="checkbox" id="ly_reserves"><span class="tog"></span>Marine Reserves</label>
     <label class="lrow"><input type="checkbox" id="ly_sat" checked><span class="tog"></span>Satellite Imagery</label>
@@ -617,10 +618,20 @@ const pinSvg = (sel,color)=>`<svg class="pin ${sel?'sel':''}" width="26" height=
   <path d="M13 0C6 0 .5 5.4.5 12.2.5 21 13 34 13 34s12.5-13 12.5-21.8C25.5 5.4 20 0 13 0Z" fill="${color}"/>
   <circle cx="13" cy="12" r="5" fill="#041B38"/></svg>`;
 function spotIcon(sel){return L.divIcon({className:'',html:pinSvg(sel,sel?'#ffffff':'#F8C11E'),iconSize:[26,34],iconAnchor:[13,34],popupAnchor:[0,-30]});}
+function colorPin(color){return L.divIcon({className:'',html:pinSvg(false,color),iconSize:[26,34],iconAnchor:[13,34],popupAnchor:[0,-30]});}
+
+const PENDING_FILL='rgba(255,255,255,.5)';   // half-faded white = not loaded yet
+const heatColor={};
+let heatOn=!!(document.getElementById('ly_heat')&&document.getElementById('ly_heat').checked);
+function baseIconFor(name){
+  if(heatOn) return heatColor[name] ? colorPin(heatColor[name]) : colorPin(PENDING_FILL);
+  return spotIcon(false);
+}
+
 const spotLayer = L.layerGroup();
 const markerByName = {};
 SPOTS.forEach(s=>{
-  const m=L.marker([s.lat,s.lng],{icon:spotIcon(false),title:s.name});
+  const m=L.marker([s.lat,s.lng],{icon:baseIconFor(s.name),title:s.name});
   m.on('click',()=>selectLocation(s.lat,s.lng,s.name,s.region));
   m.spot=s; markerByName[s.name]=m; spotLayer.addLayer(m);
 });
@@ -628,7 +639,7 @@ spotLayer.addTo(map);
 
 let selMarker=null;
 function highlight(name){
-  if(selMarker) selMarker.setIcon(spotIcon(false));
+  if(selMarker) selMarker.setIcon(baseIconFor(selMarker.spot.name));
   const m=markerByName[name];
   if(m){ m.setIcon(spotIcon(true)); selMarker=m; }
   else selMarker=null;
@@ -1062,11 +1073,99 @@ function biteIndex(i){
   return Math.max(1,Math.min(10,Math.round(score*10)/10));
 }
 function scoreColor(s){
-  if(s>=8)return getCSS('--green'); if(s>=6.5)return getCSS('--lime');
-  if(s>=4.5)return getCSS('--amber'); return getCSS('--coral');
+  if(s>=8)return getCSS('--gold'); if(s>=6)return getCSS('--grn');
+  if(s>=4)return getCSS('--lblue'); return getCSS('--red');
 }
-function scoreWord(s){return s>=8?'Prime time':s>=6.5?'Good window':s>=4.5?'Worth a look':'Tough going';}
+function scoreWord(s){return s>=8?'Prime time':s>=6?'Good window':s>=4?'Worth a look':'Tough going';}
 function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+
+/* ---------- Bite heatmap: colour the visible pins by their "now" bite index ---------- */
+const HEAT_CHUNK=60;          // spots per batched request; multiple chunks cover any zoom
+let heatTimer=null, heatRun=0;
+/* pure scorer mirroring biteIndex(), but on a supplied per-spot data bundle */
+function biteIndexFor(d,i){
+  if(!d.t||!d.t[i]) return null;
+  const tm=d.t[i].getTime();
+  const v=d.sea; let tr=0;
+  if(v&&v[i]!=null){ const a=v[Math.max(0,i-1)], b=v[Math.min(v.length-1,i+1)]; if(a!=null&&b!=null) tr=(b-a)/2; }
+  const tideS=0.15+0.85*Math.min(1,Math.abs(tr)/0.45);
+  const wind=(d.wind&&d.wind[i]!=null)?d.wind[i]:12;
+  const windS=wind<=6?1:wind<=12?0.85:wind<=18?0.6:wind<=24?0.32:0.12;
+  let best=Infinity; (d.sunrise||[]).concat(d.sunset||[]).forEach(s=>{if(s)best=Math.min(best,Math.abs(s.getTime()-tm));});
+  const mins=best/60000; let lightS=mins<=45?1:mins<=90?0.8:mins<=150?0.6:0.42;
+  const hr=d.t[i].getHours(); if(hr>=22||hr<=4) lightS=Math.min(lightS,0.5);
+  let solS=0.4; const sl=d.solunar;
+  if(sl){ let maj=Infinity; sl.majors.forEach(x=>{const q=Math.abs(x.getTime()-tm)/60000; if(q<maj)maj=q;});
+          let min=Infinity; sl.minors.forEach(x=>{const q=Math.abs(x.getTime()-tm)/60000; if(q<min)min=q;});
+          const majS=maj<=120?1-(maj/120)*0.55:0, minS=min<=75?0.72-(min/75)*0.42:0;
+          solS=Math.min(1,Math.max(majS,minS,0.3)*sl.phaseStrength); }
+  let presS=0.55; const p=d.pressure;
+  if(p&&p[i]!=null){ const trend=p[i]-p[Math.max(0,i-3)];
+    presS=trend<=-2.5?0.72:trend<=-0.7?1.0:trend<0.7?0.6:trend<2.5?0.45:0.32;
+    if(p[i]>1028) presS*=0.85; presS=Math.max(0.2,Math.min(1,presS)); }
+  const score=10*(0.32*tideS+0.20*solS+0.20*windS+0.16*presS+0.12*lightS);
+  return Math.max(1,Math.min(10,score));
+}
+function visibleSpots(){
+  const b=map.getBounds();
+  return SPOTS.filter(s=>b.contains([s.lat,s.lng]));
+}
+async function fetchHeatChunk(chunk){
+  const las=chunk.map(s=>s.lat.toFixed(4)).join(','), lns=chunk.map(s=>s.lng.toFixed(4)).join(',');
+  const mURL=`https://marine-api.open-meteo.com/v1/marine?latitude=${las}&longitude=${lns}`+
+    `&hourly=sea_level_height_msl&timezone=auto&forecast_days=1&length_unit=metric&cell_selection=sea`;
+  const wURL=`https://api.open-meteo.com/v1/forecast?latitude=${las}&longitude=${lns}`+
+    `&hourly=wind_speed_10m,pressure_msl&daily=sunrise,sunset&timezone=auto&forecast_days=1&wind_speed_unit=kn`;
+  const [mR,wR]=await Promise.all([fetch(mURL),fetch(wURL)]);
+  const mj=await mR.json(), wj=await wR.json();
+  return { chunk, mArr:Array.isArray(mj)?mj:[mj], wArr:Array.isArray(wj)?wj:[wj] };
+}
+async function runHeatmap(){
+  const heatEl=document.getElementById('ly_heat');
+  if(!heatEl.checked) return;
+  const spots=visibleSpots();
+  const want=new Set(spots.map(s=>s.name));
+  // revert pins no longer in view straight away
+  for(const n in heatColor){ if(!want.has(n)){ delete heatColor[n]; const m=markerByName[n]; if(m && m!==selMarker) m.setIcon(baseIconFor(n)); } }
+  if(!spots.length) return;
+  // show "loading" (faded white) on any visible pin not yet coloured
+  spots.forEach(s=>{ if(!heatColor[s.name]){ const m=markerByName[s.name]; if(m && m!==selMarker) m.setIcon(colorPin(PENDING_FILL)); } });
+  const myRun=++heatRun;                                // guard against overlapping refreshes
+  const chunks=[]; for(let i=0;i<spots.length;i+=HEAT_CHUNK) chunks.push(spots.slice(i,i+HEAT_CHUNK));
+  let results;
+  try{ results=await Promise.all(chunks.map(fetchHeatChunk)); }
+  catch(e){ console.error('heatmap fetch failed',e); return; }
+  if(myRun!==heatRun || !heatEl.checked) return;        // newer run started, or toggled off
+  const now=Date.now();
+  results.forEach(({chunk,mArr,wArr})=>{
+    chunk.forEach((s,k)=>{
+      const wl=wArr[k]||{}, ml=mArr[k]||{};
+      const wh=wl.hourly||{}, dl=wl.daily||{};
+      const times=(wh.time||[]).map(t=>new Date(t));
+      if(!times.length) return;
+      let bi=0; for(let i=0;i<times.length;i++){ if(times[i].getTime()<=now) bi=i; else break; }
+      const d={ t:times, sea:(ml.hourly&&ml.hourly.sea_level_height_msl)||[],
+        wind:wh.wind_speed_10m||[], pressure:wh.pressure_msl||[],
+        sunrise:(dl.sunrise||[]).map(x=>new Date(x)), sunset:(dl.sunset||[]).map(x=>new Date(x)),
+        solunar:computeSolunar(s.lat,s.lng) };
+      const idx=biteIndexFor(d,bi);
+      if(idx==null) return;
+      heatColor[s.name]=scoreColor(idx);
+      const m=markerByName[s.name];
+      if(m && m!==selMarker) m.setIcon(colorPin(heatColor[s.name]));
+    });
+  });
+}
+function clearHeatmap(){
+  for(const n in heatColor) delete heatColor[n];
+  SPOTS.forEach(s=>{ const m=markerByName[s.name]; if(m && m!==selMarker) m.setIcon(spotIcon(false)); });
+}
+document.getElementById('ly_heat').addEventListener('change',e=>{
+  heatOn=e.target.checked;
+  if(heatOn) runHeatmap(); else clearHeatmap();
+});
+map.on('moveend',()=>{ if(document.getElementById('ly_heat').checked){ clearTimeout(heatTimer); heatTimer=setTimeout(runHeatmap,1200); } });
+if(document.getElementById('ly_heat').checked){ heatOn=true; runHeatmap(); }
 
 /* ---------- render at scrubber index ---------- */
 function render(offsetSteps){
