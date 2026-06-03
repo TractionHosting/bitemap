@@ -90,7 +90,7 @@
   .lrow input:checked + .tog::after{left:17px;background:#eafff9}
 
   /* ---------- conditions panel ---------- */
-  .panel{position:absolute;z-index:1000;top:1rem;bottom:.9rem;right:1.4rem;width:392px;max-width:calc(100vw - 1.8rem);
+  .panel{position:absolute;z-index:1000;top:1rem;bottom:.9rem;right:calc(1.4rem + 20px);width:392px;max-width:calc(100vw - 1.8rem);
     background:var(--glass);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(16px);
     box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
   .panel .head{padding:.78rem 1rem .6rem;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:.7rem}
@@ -132,7 +132,9 @@
   .bestwin .bw-v{font-family:'Spline Sans Mono';font-size:1rem;color:var(--ink);margin-top:.12rem}
   .bestwin .bw-score{margin-left:auto;font-family:'Spline Sans Mono';font-size:.92rem;font-weight:600;
     color:#041B38;background:var(--gold);border-radius:8px;padding:.2rem .5rem;text-align:center;min-width:34px}
-  .cell{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:.55rem .65rem}
+  .cell{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:12px;padding:.55rem .65rem;cursor:pointer;transition:border-color .15s,background .15s,box-shadow .15s}
+  .cell:hover{border-color:var(--brass-2)}
+  .cell.active{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);background:rgba(248,193,30,.08)}
   .cell .k{font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
   .cell .v{font-family:'Spline Sans Mono';font-size:1.1rem;margin-top:.18rem;display:flex;align-items:baseline;gap:.25rem}
   .cell .v u{text-decoration:none;font-size:.7rem;color:var(--muted)}
@@ -143,6 +145,9 @@
 
   .tideblock{padding:.35rem 1rem .5rem;flex:1;display:flex;flex-direction:column;min-height:0}
   .tideblock .cap{display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem}
+  .chartkey{font-size:.54rem;color:var(--muted);display:flex;gap:.45rem .7rem;flex-wrap:wrap;align-items:center;line-height:1.2;margin:-.1rem 0 .25rem;min-height:.7rem}
+  .chartkey span{display:inline-flex;align-items:center}
+  .chartkey i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:3px}
   .tideblock .cap b{font-family:'CG Gothic No4','Arimo','Helvetica Neue',Arial,sans-serif;font-size:.9rem}
   .tideblock .cap span{font-size:.72rem;color:var(--muted)}
   .chart{width:100%;flex:4 1 0;min-height:110px;max-height:300px;display:block}
@@ -170,6 +175,7 @@
   .legend .bar{height:8px;border-radius:6px;margin:.35rem 0 .25rem;
     background:linear-gradient(90deg,var(--red),var(--lblue),var(--grn),var(--gold))}
   .legend .ends{display:flex;justify-content:space-between}
+  .leaflet-control-zoom{display:none}
   .toast{position:absolute;z-index:1200;left:50%;top:4.7rem;transform:translateX(-50%);
     background:var(--glass);border:1px solid var(--line);border-radius:11px;padding:.5rem .9rem;font-size:.82rem;
     backdrop-filter:blur(12px);box-shadow:var(--shadow);display:none;align-items:center;gap:.55rem}
@@ -223,6 +229,7 @@
     .layers.open .opts{display:block}
     .layers.open .chev{transform:rotate(180deg)}
     .legend{display:none}
+    .leaflet-control-zoom{display:block}
     .tools{left:.7rem;right:auto;top:auto;bottom:.7rem}
     body:has(.panel.open) .tools, body:has(.panel.open) .layers{display:none}
     .topbar{flex-wrap:wrap}
@@ -247,7 +254,6 @@
     .fcast-wrap{margin:.6rem 1rem .4rem}
     .grid{gap:.65rem;padding:.5rem 1rem .8rem}
     .tideblock{padding:.7rem 1rem .55rem}
-    .nexttide{margin-top:.7rem}
     .scrub{padding:.8rem 1rem calc(3rem + env(safe-area-inset-bottom,0px))}
     .tspace{display:none}
     .hint{display:none}
@@ -342,23 +348,19 @@
       <div class="fcast" id="fcast"></div>
     </div>
 
-    <div class="grid">
-      <div class="cell"><div class="k">Wind</div><div class="v"><span id="windV">—</span><u>kn</u> <span class="arrow" id="windArr"></span></div><div class="x" id="windX">—</div></div>
-      <div class="cell"><div class="k">Swell</div><div class="v"><span id="swellV">—</span><u>m</u></div><div class="x" id="swellX">—</div></div>
-      <div class="cell"><div class="k">Air / Sky</div><div class="v"><span id="tempV">—</span><u>°C</u><span class="skyic" id="skyIc"></span></div><div class="x" id="skyX">—</div></div>
-      <div class="cell"><div class="k">Sun</div><div class="v" style="font-size:.92rem" id="sunV">—</div><div class="x" id="sunX">—</div></div>
-      <div class="cell"><div class="k">Moon</div><div class="v"><span id="moonV">—</span><u>% lit</u></div><div class="x" id="moonX">—</div></div>
-      <div class="cell"><div class="k">Sea State</div><div class="v"><span id="seaV">—</span><u>/10</u></div><div class="x" id="seaX">—</div></div>
+    <div class="grid" id="metricGrid">
+      <div class="cell" data-metric="wind"><div class="k">Wind</div><div class="v"><span id="windV">—</span><u>kn</u> <span class="arrow" id="windArr"></span></div><div class="x" id="windX">—</div></div>
+      <div class="cell" data-metric="swell"><div class="k">Swell</div><div class="v"><span id="swellV">—</span><u>m</u></div><div class="x" id="swellX">—</div></div>
+      <div class="cell" data-metric="sky"><div class="k">Weather</div><div class="v"><span id="tempV">—</span><u>°C</u><span class="skyic" id="skyIc"></span></div><div class="x" id="skyX">—</div></div>
+      <div class="cell" data-metric="sun"><div class="k">Sun</div><div class="v" style="font-size:.92rem" id="sunV">—</div><div class="x" id="sunX">—</div></div>
+      <div class="cell active" data-metric="tide"><div class="k">Tide</div><div class="v"><span id="tideCellV">—</span><u>m</u></div><div class="x" id="tideCellX">—</div></div>
+      <div class="cell" data-metric="sea"><div class="k">Sea State</div><div class="v"><span id="seaV">—</span><u>/10</u></div><div class="x" id="seaX">—</div></div>
     </div>
 
     <div class="tideblock">
-      <div class="cap"><b>Tide</b><span id="tideState">—</span></div>
+      <div class="cap"><b id="chartTitle">Tide</b><span id="chartNow">—</span></div>
+      <div class="chartkey" id="chartKey"></div>
       <svg class="chart" id="tideChart" viewBox="0 0 320 96"></svg>
-      <div class="nexttide">
-        <div><span class="k">High</span><span class="v" id="nextHigh">—</span></div>
-        <div><span class="k">Low</span><span class="v" id="nextLow">—</span></div>
-      </div>
-      <div class="tspace"></div>
     </div>
   </div>
 
@@ -367,12 +369,6 @@
     <input type="range" id="scrubber" min="0" max="1440" value="0" step="1">
     <button class="reset" id="scrubReset">↺ Back to now</button>
   </div>
-</div>
-
-<div class="legend">
-  Bite Index
-  <div class="bar"></div>
-  <div class="ends"><span>Tough</span><span>Prime</span></div>
 </div>
 
 <div class="toast" id="toast"><span class="spin"></span><span id="toastMsg">Loading…</span></div>
@@ -629,7 +625,11 @@ const SunCalc=(function(){
       Jset=solarTransitJ(approxTransit(hourAngle(h0,phi,decl),lw,n),M,L), Jrise=Jnoon-(Jset-Jnoon);
     return {sunrise:fromJ(Jrise), sunset:fromJ(Jset)};
   }
-  return {getMoonPosition:moonPos,getMoonIllumination:moonIllum,getMoonTimes:moonTimes,getSunTimes:sunTimes};
+  function sunPos(date,lat,lng){
+    const lw=rad*-lng,phi=rad*lat,d=toDays(date),c=sunC(d),H=sid(d,lw)-c.ra;
+    return {azimuth:azi(H,phi,c.dec),altitude:alt(H,phi,c.dec)};
+  }
+  return {getMoonPosition:moonPos,getMoonIllumination:moonIllum,getMoonTimes:moonTimes,getSunTimes:sunTimes,getSunPosition:sunPos};
 })();
 
 function moonName(p){return ['New Moon','Waxing Crescent','First Quarter','Waxing Gibbous','Full Moon','Waning Gibbous','Last Quarter','Waning Crescent'][Math.round(p*8)%8];}
@@ -638,6 +638,7 @@ function moonName(p){return ['New Moon','Waxing Crescent','First Quarter','Waxin
 const METSVC_PROXY='http://localhost:8787/cond';   // marine/wind source; swap for a hosted proxy to go live
 const MS_LOGO='data:image/png;base64,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';
 let curLat=null, curLng=null;
+let chartMetric='tide';   // selected metric for the live chart
 function computeSolunar(la,ln){
   const majors=[],minors=[]; const base=new Date(); base.setHours(0,0,0,0);
   for(let dd=0;dd<7;dd++){
@@ -1131,7 +1132,7 @@ async function omJSON(url,ttl=600000){
 }
 function condURLs(la,ln){
   const marineVars='sea_level_height_msl,wave_height,swell_wave_height,swell_wave_period';
-  const wxVars='temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,cloud_cover,pressure_msl';
+  const wxVars='temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,cloud_cover,precipitation,pressure_msl';
   return {
     marineURL:`https://marine-api.open-meteo.com/v1/marine?latitude=${la}&longitude=${ln}`+
       `&hourly=${marineVars}&timezone=auto&forecast_days=7&length_unit=metric&cell_selection=sea`,
@@ -1185,6 +1186,7 @@ async function fetchOpenMeteo(la,ln){
     windDir:w.hourly.wind_direction_10m||[],
     code:w.hourly.weather_code||[],
     cloud:w.hourly.cloud_cover||[],
+    precip:w.hourly.precipitation||[],
     pressure:w.hourly.pressure_msl||[],
     solunar:computeSolunar(la,ln),
     sunrise:(w.daily&&w.daily.sunrise||[]).map(s=>new Date(s)),
@@ -1514,13 +1516,7 @@ function render(offsetSteps){
     document.getElementById('sunX').textContent='rise / set';
   }
 
-  // moon / solunar
-  const sl=DATA.solunar;
-  if(sl){
-    document.getElementById('moonV').textContent=Math.round(sl.illum*100);
-    const fm=sl.majors.filter(d=>d.getTime()>targetMs).sort((a,b)=>a-b)[0];
-    document.getElementById('moonX').textContent=`${sl.phaseName}${fm?' · maj '+fmtClock(fm):''}`;
-  }
+  // (moon cell removed; solunar still feeds the bite index via biteIndex)
 
   // sea state (Douglas scale from significant wave height)
   const hs=DATA.wave[i]??DATA.swell[i];
@@ -1532,89 +1528,142 @@ function render(offsetSteps){
     document.getElementById('seaX').textContent=`${sst.word} · ${hs.toFixed(1)} m`;
   } else { seaVEl.textContent='—'; document.getElementById('seaX').textContent=''; }
 
-  // tide state + next high/low (relative to target time)
+  // tide cell: current height + state + next extreme
   const r=tideRate(i);
-  document.getElementById('tideState').textContent = Math.abs(r)<0.03?'slack water':(r>0?'incoming ▲':'outgoing ▼');
+  const tstate = Math.abs(r)<0.03?'slack':(r>0?'rising':'falling');
+  if(DATA._seaDatum==null){ const _sv=DATA.sea.filter(v=>v!=null); DATA._seaDatum=_sv.length?Math.min(..._sv):0; }
+  document.getElementById('tideCellV').textContent = DATA.sea[i]!=null?(DATA.sea[i]-DATA._seaDatum).toFixed(1):'—';
   const futureH=DATA.extremes.find(e=>e.type==='H'&&e.t.getTime()>targetMs);
   const futureL=DATA.extremes.find(e=>e.type==='L'&&e.t.getTime()>targetMs);
-  document.getElementById('nextHigh').textContent = futureH?`${fmtClock(futureH.t)} · ${futureH.v.toFixed(1)} m` :'—';
-  document.getElementById('nextLow').textContent  = futureL?`${fmtClock(futureL.t)} · ${futureL.v.toFixed(1)} m` :'—';
+  const nextE=(futureH&&futureL)?(futureH.t<futureL.t?futureH:futureL):(futureH||futureL);
+  document.getElementById('tideCellX').textContent = nextE?`${tstate} · ${nextE.type} ${fmtClock(nextE.t)}`:tstate;
 
-  drawTide(i,targetMs);
+  drawMetric(i,targetMs);
   if(heatOn) recolorHeatAt(targetMs);
 }
 
 /* ---------- tide chart (SVG) ---------- */
-function drawTide(curIdx,targetMs){
-  const svg=document.getElementById('tideChart');
-  const W=Math.max(280,Math.round(svg.getBoundingClientRect().width)||320),padL=6,padR=6,padT=12,padB=18;
+const CHART_KEYS={
+  tide:'Height above the forecast low tide · H / L = next highs & lows',
+  wind:'Wind speed (kn)',
+  swell:'Significant swell height (m)',
+  sky:'<span><i style="background:rgba(248,193,30,.75)"></i>sun</span><span><i style="background:rgba(200,212,228,.6)"></i>cloud</span><span><i style="background:rgba(87,182,230,.85)"></i>rain</span><span><i style="background:#F8C11E"></i>temp</span>',
+  sun:'Sun elevation above / below the dashed horizon',
+  sea:'Sea state 1–10 (10 = calm, 1 = very high)'
+};
+const METRICS={
+  tide: {label:'Tide',      unit:' m',  color:'#57B6E6', hilo:true,      val:i=>DATA.sea[i]},
+  wind: {label:'Wind',      unit:' kn', color:'#8ec9ef',                 val:i=>DATA.wind[i]},
+  swell:{label:'Swell',     unit:' m',  color:'#6fcfbf',                 val:i=>(DATA.swell[i]!=null?DATA.swell[i]:DATA.wave[i])},
+  sky:  {label:'Weather',       unit:'\u00b0',   color:'#F8C11E',            weather:true, val:i=>DATA.temp[i]},
+  sun:  {label:'Sun',       unit:'\u00b0',   color:'#ffd27a', horizon:true,
+         val:i=>{ if(curLat==null)return null; const p=SunCalc.getSunPosition(DATA.t[i],curLat,curLng); return p?p.altitude*180/Math.PI:null; }},
+  sea:  {label:'Sea State', unit:'/10', color:'#45B86A', yFix:[0.4,10.6],
+         val:i=>{ const s=seaState(DATA.wave[i]!=null?DATA.wave[i]:DATA.swell[i]); return s?s.n:null; }}
+};
+function updateChartCap(m,val,ti){
+  const t=document.getElementById('chartTitle'); if(t)t.textContent=m.label;
+  const k=document.getElementById('chartKey'); if(k)k.innerHTML=CHART_KEYS[chartMetric]||'';
+  const el=document.getElementById('chartNow'); if(!el)return;
+  if(val==null){ el.textContent='—'; el.style.color='var(--muted)'; return; }
+  el.style.color=m.color;
+  if(chartMetric==='wind'){
+    const dir=DATA.windDir[ti], gust=DATA.gust[ti];
+    let s=Math.round(val)+' kn';
+    if(dir!=null) s+=` <span style="display:inline-block;transform:rotate(${dir+180}deg)">↑</span> ${compass(dir)}`;
+    if(gust!=null) s+=` · gust ${Math.round(gust)}`;
+    el.innerHTML=s;
+  } else if(chartMetric==='sky'){
+    let s=Math.round(val)+m.unit; const w=WMO[DATA.code[ti]]; if(w) s+=' · '+w;
+    const pr=DATA.precip&&DATA.precip[ti]; if(pr!=null&&pr>0) s+=' · '+pr.toFixed(1)+' mm';
+    el.textContent=s;
+  } else {
+    el.textContent = (chartMetric==='tide'||chartMetric==='swell') ? val.toFixed(1)+m.unit : Math.round(val)+m.unit;
+  }
+}
+function drawMetric(curIdx,targetMs){
+  const m=METRICS[chartMetric]||METRICS.tide;
+  const svg=document.getElementById('tideChart'); if(!svg)return;
+  const W=Math.max(280,Math.round(svg.getBoundingClientRect().width)||320),padL=6,padR=6,padT=14,padB=18;
   const H=Math.max(96,Math.round(svg.getBoundingClientRect().height)||110);
   svg.setAttribute("viewBox","0 0 "+W+" "+H);
-  // window: 6h back .. 24h ahead from now
   const startMs=DATA.t[baseIdx].getTime()-6*3600000;
   const endMs=DATA.t[baseIdx].getTime()+120*3600000;  // 5 days ahead
   const pts=[];
   for(let i=0;i<DATA.t.length;i++){
     const tm=DATA.t[i].getTime();
     if(tm<startMs-3600000||tm>endMs+3600000)continue;
-    if(DATA.sea[i]==null)continue;
-    pts.push({tm,v:DATA.sea[i]});
+    const v=m.val(i); if(v==null||isNaN(v))continue;
+    pts.push({tm,v,i});
   }
-  if(pts.length<2){svg.innerHTML=`<text x="160" y="60" fill="#9fb0c4" font-size="11" text-anchor="middle" font-family="Arimo,Helvetica,Arial,sans-serif">No tide model data at this point</text>`;return;}
-  const vMin=Math.min(...pts.map(p=>p.v)), vMax=Math.max(...pts.map(p=>p.v));
+  if(pts.length<2){ svg.innerHTML=`<text x="${W/2}" y="${H/2}" fill="#9fb0c4" font-size="11" text-anchor="middle" font-family="Arimo,Helvetica,Arial,sans-serif">No ${m.label.toLowerCase()} data here</text>`; updateChartCap(m,null,curIdx); return; }
+  let vMin=Math.min(...pts.map(p=>p.v)), vMax=Math.max(...pts.map(p=>p.v));
+  if(m.yFix){ vMin=m.yFix[0]; vMax=m.yFix[1]; }
+  else if(m.horizon){ const a=Math.max(Math.abs(vMin),Math.abs(vMax),5); vMin=-a; vMax=a; }
+  else { const pad=((vMax-vMin)||1)*0.14; vMin-=pad; vMax+=pad; }
   const vr=(vMax-vMin)||1;
   const X=tm=>padL+(tm-startMs)/(endMs-startMs)*(W-padL-padR);
   const Y=v=>padT+(1-(v-vMin)/vr)*(H-padT-padB);
-
-  let d='', area='';
+  const innerH=H-padT-padB, baseY=H-padB;
+  let d='';
   pts.forEach((p,k)=>{ const x=X(p.tm),y=Y(p.v); d+=(k?'L':'M')+x.toFixed(1)+' '+y.toFixed(1)+' '; });
-  area=d+`L ${X(pts[pts.length-1].tm).toFixed(1)} ${H-padB} L ${X(pts[0].tm).toFixed(1)} ${H-padB} Z`;
+  const area = m.weather ? '' : (d+`L ${X(pts[pts.length-1].tm).toFixed(1)} ${baseY} L ${X(pts[0].tm).toFixed(1)} ${baseY} Z`);
 
-  // faint 6h gridlines; labels every 12h (weekday at midnight, noon between)
-  let ticks='';
-  for(let i=0;i<DATA.t.length;i++){
-    const tm=DATA.t[i].getTime(); if(tm<startMs||tm>endMs)continue;
-    const hr=DATA.t[i].getHours();
-    if(hr%6===0){ const x=X(tm); ticks+=`<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="rgba(255,255,255,.05)"/>`; }
-    if(hr===0){ const x=X(tm);
-      ticks+=`<text x="${x}" y="${H-6}" fill="#9fb0c4" font-size="8.5" text-anchor="middle" font-family="Spline Sans Mono">${DATA.t[i].toLocaleDateString([], {weekday:'short'})}</text>`;
-    }
+  // weather metric: day/night strip + cloud-cover area + rain bars behind the temp line
+  let pre='';
+  if(m.weather){
+    const bw=Math.max(1.4,(W-padL-padR)/Math.max(pts.length,1)*0.7);
+    // cloud-cover area (grey)
+    let cl='';
+    pts.forEach(p=>{ const cc=DATA.cloud[p.i]; if(cc==null)return; const y=baseY-(cc/100)*innerH; cl+=(cl?'L':'M')+X(p.tm).toFixed(1)+' '+y.toFixed(1)+' '; });
+    if(cl) cl=`<path d="${cl} L ${X(pts[pts.length-1].tm).toFixed(1)} ${baseY} L ${X(pts[0].tm).toFixed(1)} ${baseY} Z" fill="rgba(200,212,228,.13)"/>`;
+    // sun bars: sunny weather = clear sky while the sun is up
+    let sn='';
+    pts.forEach(p=>{ const cc=DATA.cloud[p.i]; if(cc==null)return;
+      let up=true; if(curLat!=null){ const sp=SunCalc.getSunPosition(DATA.t[p.i],curLat,curLng); up=sp&&sp.altitude>0; }
+      if(!up)return; const clear=Math.max(0,1-cc/100); if(clear<=0.05)return;
+      const hh=clear*(innerH*0.55);
+      sn+=`<rect x="${(X(p.tm)-bw/2).toFixed(1)}" y="${(baseY-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="rgba(248,193,30,.5)" rx="1"/>`; });
+    // rain bars (blue)
+    let rn='';
+    if(DATA.precip){ pts.forEach(p=>{ const pr=DATA.precip[p.i]; if(pr==null||pr<=0)return; const hh=Math.min(pr,5)/5*(innerH*0.55); rn+=`<rect x="${(X(p.tm)-bw/2).toFixed(1)}" y="${(baseY-hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}" fill="rgba(87,182,230,.6)" rx="1"/>`; }); }
+    pre = cl+sn+rn;
   }
-  // hi/lo dots
-  let dots='';
-  DATA.extremes.forEach(e=>{ const tm=e.t.getTime(); if(tm<startMs||tm>endMs)return;
-    const x=X(tm),y=Y(e.v);
-    dots+=`<circle cx="${x}" cy="${y}" r="2.6" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}"/>`;
-    dots+=`<text x="${x}" y="${y-6}" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}" font-size="8" text-anchor="middle" font-family="Spline Sans Mono">${e.type}</text>`;
-  });
-  // now line + scrubber marker
+
+  let ticks='';
+  for(let i=0;i<DATA.t.length;i++){ const tm=DATA.t[i].getTime(); if(tm<startMs||tm>endMs)continue; const hr=DATA.t[i].getHours();
+    if(hr%6===0){ const x=X(tm); ticks+=`<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="rgba(255,255,255,.05)"/>`; }
+    if(hr===0){ const x=X(tm); ticks+=`<text x="${x}" y="${H-6}" fill="#9fb0c4" font-size="8.5" text-anchor="middle" font-family="Spline Sans Mono">${DATA.t[i].toLocaleDateString([],{weekday:'short'})}</text>`; }
+  }
+  let extra='';
+  if(m.hilo){ DATA.extremes.forEach(e=>{ const tm=e.t.getTime(); if(tm<startMs||tm>endMs)return; const x=X(tm),y=Y(e.v);
+      extra+=`<circle cx="${x}" cy="${y}" r="2.6" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}"/>`;
+      extra+=`<text x="${x}" y="${y-6}" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}" font-size="8" text-anchor="middle" font-family="Spline Sans Mono">${e.type}</text>`; }); }
+  if(m.horizon){ const hy=Y(0); extra+=`<line x1="${padL}" y1="${hy}" x2="${W-padR}" y2="${hy}" stroke="rgba(255,255,255,.28)" stroke-dasharray="3 3"/>`; }
   const nowX=X(DATA.t[baseIdx].getTime());
   const tgt=Math.max(startMs,Math.min(endMs,targetMs));
   const tgtX=X(tgt);
-  // interpolate sea level along the line at the exact scrubbed time so the marker rides the curve
   let val=null;
-  for(let k=0;k<DATA.t.length-1;k++){
-    const a=DATA.t[k].getTime(), b=DATA.t[k+1].getTime();
-    if(tgt>=a && tgt<=b && DATA.sea[k]!=null && DATA.sea[k+1]!=null){
-      val=DATA.sea[k]+(DATA.sea[k+1]-DATA.sea[k])*((tgt-a)/(b-a)); break;
-    }
-  }
-  if(val==null) val=DATA.sea[curIdx]??pts[0].v;
+  for(let k=0;k<DATA.t.length-1;k++){ const a=DATA.t[k].getTime(),b=DATA.t[k+1].getTime(),va=m.val(k),vb=m.val(k+1);
+    if(tgt>=a&&tgt<=b&&va!=null&&vb!=null){ val=va+(vb-va)*((tgt-a)/(b-a)); break; } }
+  if(val==null)val=(m.val(curIdx)!=null?m.val(curIdx):pts[0].v);
   const tgtY=Y(val);
-
+  const gid='grad_'+chartMetric;
   svg.innerHTML=`
-    <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F8C11E" stop-opacity=".32"/><stop offset="1" stop-color="#F8C11E" stop-opacity="0"/>
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${m.color}" stop-opacity=".34"/><stop offset="1" stop-color="${m.color}" stop-opacity="0"/>
     </linearGradient></defs>
     ${ticks}
-    <path d="${area}" fill="url(#tg)"/>
-    <path d="${d}" fill="none" stroke="#F8C11E" stroke-width="2" stroke-linejoin="round"/>
-    ${dots}
+    ${pre}
+    ${area?`<path d="${area}" fill="url(#${gid})"/>`:''}
+    <path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" stroke-linejoin="round"/>
+    ${extra}
     <line x1="${nowX}" y1="${padT-4}" x2="${nowX}" y2="${H-padB}" stroke="rgba(255,255,255,.45)" stroke-dasharray="2 3"/>
     <text x="${nowX}" y="${padT-6}" fill="#ffffff" font-size="8" text-anchor="middle" font-family="Spline Sans Mono">now</text>
-    <line x1="${tgtX}" y1="${padT-4}" x2="${tgtX}" y2="${H-padB}" stroke="#F8C11E" stroke-width="1.4"/>
-    <circle cx="${tgtX}" cy="${tgtY}" r="4" fill="#ffffff" stroke="#F8C11E" stroke-width="2"/>
+    <line x1="${tgtX}" y1="${padT-4}" x2="${tgtX}" y2="${H-padB}" stroke="${m.color}" stroke-width="1.4"/>
+    <circle cx="${tgtX}" cy="${tgtY}" r="4" fill="#ffffff" stroke="${m.color}" stroke-width="2"/>
   `;
+  updateChartCap(m, chartMetric==='tide'?(val-(DATA._seaDatum||0)):val, curIdx);
 }
 
 /* ---------- scrubber ---------- */
@@ -1630,6 +1679,13 @@ document.getElementById('fcast').addEventListener('click',e=>{
   const off=Math.round((+box.dataset.peak - DATA.t[baseIdx].getTime())/300000);
   const clamped=Math.max(0,Math.min(parseInt(scrubber.max),off));
   scrubber.value=clamped; render(clamped);
+});
+// tap a metric cell to switch the live chart to that metric
+document.getElementById('metricGrid').addEventListener('click',e=>{
+  const cell=e.target.closest('.cell'); if(!cell||!cell.dataset.metric)return;
+  chartMetric=cell.dataset.metric;
+  document.querySelectorAll('#metricGrid .cell').forEach(c=>c.classList.toggle('active',c===cell));
+  if(typeof DATA!=='undefined'&&DATA) render(parseInt(scrubber.value)||0);
 });
 
 /* ---------- boot ---------- */
