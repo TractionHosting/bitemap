@@ -29,6 +29,9 @@
   html,body{height:100%;margin:0;background:var(--abyss);color:var(--ink);
     font-family:'CG Gothic No4','Arimo','Helvetica Neue',Arial,sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
   #map{position:absolute;inset:0;z-index:1;background:#041B38}
+  #map.chart-mode .basemap-tiles{filter:url(#watermask)}
+  #map.chart-mode{background:#f2c96b}
+  #map.chart-mode .topo-tiles{filter:url(#topolines);opacity:.45}
   .leaflet-container{background:#041B38;font-family:'CG Gothic No4','Arimo','Helvetica Neue',Arial,sans-serif,sans-serif}
 
   /* ---------- top bar ---------- */
@@ -103,6 +106,7 @@
   .score{display:flex;align-items:center;gap:.9rem;padding:.75rem 1rem .45rem}
   .dial{position:relative;width:88px;height:88px;flex:0 0 auto}
   .dial svg{width:100%;height:100%;transform:rotate(-90deg)}
+  #dialArc{transition:stroke .3s ease}
   .dial .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
   .dial .num b{font-family:'Spline Sans Mono';font-size:1.35rem;line-height:1}
   .dial .num span{font-size:.5rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:2px}
@@ -262,6 +266,20 @@
 </head>
 <body>
 <div id="map"></div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="watermask" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+    <feColorMatrix type="matrix" values="0 0 0 0 1
+                                          0 0 0 0 1
+                                          0 0 0 0 1
+                                          -6 0 6 0 0"/>
+  </filter>
+  <filter id="topolines" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+    <feColorMatrix type="matrix" values="0.34 0.34 0.34 0 0
+                                          0.34 0.34 0.34 0 0
+                                          0.34 0.34 0.34 0 0
+                                          -0.5 -0.5 -0.5 0 1.55"/>
+  </filter>
+</defs></svg>
 
 <!-- top bar -->
 <div class="topbar">
@@ -290,6 +308,8 @@
     <label class="lrow"><input type="checkbox" id="ly_fish" checked><span class="tog"></span>Fishing Spots</label>
     <label class="lrow"><input type="checkbox" id="ly_reserves"><span class="tog"></span>Marine Reserves</label>
     <label class="lrow"><input type="checkbox" id="ly_sat" checked><span class="tog"></span>Satellite Imagery</label>
+    <label class="lrow"><input type="checkbox" id="ly_chart"><span class="tog"></span>Marine Chart (LINZ)</label>
+    <label class="lrow"><input type="checkbox" id="ly_bathy"><span class="tog"></span>Depth / Bathymetry</label>
     <label class="lrow"><input type="checkbox" id="ly_ramps"><span class="tog"></span>Boat Ramps</label>
     <label class="lrow"><input type="checkbox" id="ly_marks"><span class="tog"></span>Nautical Marks</label>
   </div>
@@ -344,7 +364,7 @@
     </div>
 
     <div class="fcast-wrap">
-      <div class="fcast-h">5-day outlook · peak bite &amp; avg sea</div>
+      <div class="fcast-h">5-day outlook · avg bite &amp; sea</div>
       <div class="fcast" id="fcast"></div>
     </div>
 
@@ -352,9 +372,9 @@
       <div class="cell" data-metric="wind"><div class="k">Wind</div><div class="v"><span id="windV">—</span><u>kn</u> <span class="arrow" id="windArr"></span></div><div class="x" id="windX">—</div></div>
       <div class="cell" data-metric="swell"><div class="k">Swell</div><div class="v"><span id="swellV">—</span><u>m</u></div><div class="x" id="swellX">—</div></div>
       <div class="cell" data-metric="sky"><div class="k">Weather</div><div class="v"><span id="tempV">—</span><u>°C</u><span class="skyic" id="skyIc"></span></div><div class="x" id="skyX">—</div></div>
+      <div class="cell" data-metric="sea"><div class="k">Sea State</div><div class="v"><span id="seaV">—</span><u>/10</u></div><div class="x" id="seaX">—</div></div>
       <div class="cell" data-metric="sun"><div class="k">Sun</div><div class="v" style="font-size:.92rem" id="sunV">—</div><div class="x" id="sunX">—</div></div>
       <div class="cell active" data-metric="tide"><div class="k">Tide</div><div class="v"><span id="tideCellV">—</span><u>m</u></div><div class="x" id="tideCellX">—</div></div>
-      <div class="cell" data-metric="sea"><div class="k">Sea State</div><div class="v"><span id="seaV">—</span><u>/10</u></div><div class="x" id="seaX">—</div></div>
     </div>
 
     <div class="tideblock">
@@ -674,10 +694,34 @@ L.control.zoom({position:'bottomright'}).addTo(map);
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {maxZoom:19,keepBuffer:4,updateWhenZooming:false,attribution:'Imagery &copy; Esri'});
 const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  {maxZoom:19,keepBuffer:4,updateWhenZooming:false,attribution:'&copy; OpenStreetMap'});
+  {maxZoom:19,keepBuffer:4,updateWhenZooming:false,className:'basemap-tiles',attribution:'&copy; OpenStreetMap'});
 const labels = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-labels/{z}/{x}/{y}.png',{maxZoom:18,opacity:.9});
 const marks = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png',
   {maxZoom:18,attribution:'&copy; OpenSeaMap'});
+
+// --- depth & chart layers ---
+// LINZ official NZ marine charts (same source Wet Maps uses). Needs a FREE key:
+//   1) make a Koordinates ID at https://data.linz.govt.nz   2) create an API key
+//   3) paste it below. Sets 4758 (North Is) + 4759 (South Is) = whole country.
+const LINZ_KEY='cbf4c960f7344a2cbe0b73e62a8ae734';
+const linzURL = setId => `https://tiles-{s}.data-cdn.linz.govt.nz/services;key=${LINZ_KEY}/tiles/v4/set=${setId}/EPSG:3857/{z}/{x}/{y}.png`;
+const LINZ_CHART_SETS=['4758','4759'];
+const linzChart = L.layerGroup(
+  LINZ_CHART_SETS.map(setId => L.tileLayer(linzURL(setId),
+    {subdomains:'abcd',maxZoom:18,updateWhenIdle:true,keepBuffer:1,zIndex:300,attribution:'Charts &copy; LINZ CC BY 4.0'})));
+// LINZ chart sheets render the sea but leave land blank, so while the chart is on we show the
+// plain street map underneath instead of satellite — reads like a chart, not imagery + sea.
+function chartBase(on){
+  const c=map.getContainer();
+  if(on){ if(map.hasLayer(sat)) map.removeLayer(sat); if(map.hasLayer(osm)) map.removeLayer(osm); if(map.hasLayer(topo)) map.removeLayer(topo); c.classList.add('chart-mode'); }
+  else { c.classList.remove('chart-mode'); refreshBase(); }
+}
+// topographic contour/relief lines for land, to mirror the chart's sea contours
+const topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+  {subdomains:'abc',maxZoom:17,className:'topo-tiles',zIndex:250,attribution:'Topo &copy; OpenTopoMap (CC-BY-SA)'});
+// GEBCO global bathymetry — depth shading anywhere (incl. Australia). No key needed.
+const gebco = L.tileLayer.wms('https://wms.gebco.net/mapserv?',
+  {layers:'gebco_latest_2',format:'image/png',version:'1.3.0',transparent:false,opacity:.55,zIndex:240,attribution:'Bathymetry &copy; GEBCO'});
 
 sat.addTo(map); osm.addTo(map);
 function refreshBase(){
@@ -757,6 +801,14 @@ let tapMarker=null;
 
 /* ---------- layer toggles ---------- */
 document.getElementById('ly_sat').addEventListener('change',()=>{refreshBase();syncURL();});
+document.getElementById('ly_chart').addEventListener('change',e=>{
+  if(e.target.checked){ toast('LINZ layers may take longer to render, please wait'); linzChart.addTo(map); chartBase(true); }
+  else { map.removeLayer(linzChart); chartBase(false); }
+  syncURL();
+});
+document.getElementById('ly_bathy').addEventListener('change',e=>{
+  if(e.target.checked) gebco.addTo(map); else map.removeLayer(gebco); syncURL();
+});
 document.getElementById('ly_marks').addEventListener('change',e=>{
   if(e.target.checked) marks.addTo(map); else map.removeLayer(marks); syncURL();
 });
@@ -773,27 +825,23 @@ const OVERPASS=[
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
 ];
 async function overpassFetch(q){
-  let lastErr;
-  for(const url of OVERPASS){
-    try{
-      const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),15000);
-      const r=await fetch(url,{method:'POST',
-        headers:{'Content-Type':'application/x-www-form-urlencoded'},
-        body:'data='+encodeURIComponent(q),signal:ctrl.signal});
-      clearTimeout(to);
-      if(!r.ok){ lastErr=new Error('HTTP '+r.status); continue; }   // 429/504 → next mirror
-      return await r.json();
-    }catch(e){ lastErr=e; }                                          // network/CORS/abort → next mirror
-  }
-  throw lastErr||new Error('all Overpass endpoints failed');
+  // hit every mirror at once and take whichever responds first — no more 15s-per-mirror stalls
+  const body='data='+encodeURIComponent(q);
+  const attempts=OVERPASS.map(url=>{
+    const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),9000);
+    return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body,signal:ctrl.signal})
+      .then(r=>{ clearTimeout(to); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+      .catch(e=>{ clearTimeout(to); throw e; });
+  });
+  return Promise.any(attempts);
 }
 async function loadRamps(){
   if(!document.getElementById('ly_ramps').checked) return;
   if(map.getZoom()<9){ toast('Zoom in to load boat ramps'); return; }
   if(rampBounds && rampBounds.contains(map.getBounds())) return;   // already loaded
-  const qb=map.getBounds().pad(0.2);
+  const qb=map.getBounds().pad(0.5);
   const bbox=`${qb.getSouth()},${qb.getWest()},${qb.getNorth()},${qb.getEast()}`;
-  const q=`[out:json][timeout:15];nwr["leisure"="slipway"](${bbox});out center 250;`;
+  const q=`[out:json][timeout:15];nwr["leisure"="slipway"](${bbox});out center 400;`;
   toast('Loading boat ramps…',true);
   try{
     const j=await overpassFetch(q);
@@ -815,7 +863,7 @@ async function loadRamps(){
   }
 }
 document.getElementById('ly_ramps').addEventListener('change',e=>{
-  if(e.target.checked){ rampLayer.addTo(map); rampBounds=null; loadRamps(); }
+  if(e.target.checked){ rampLayer.addTo(map); loadRamps(); }
   else map.removeLayer(rampLayer);
   syncURL();
 });
@@ -880,6 +928,8 @@ if(layers.includes('reserves')){ document.getElementById('ly_reserves').checked=
 // apply incoming layer params
 if(layers.includes('marks')||layers.includes('tide_stations')){document.getElementById('ly_marks').checked=true;marks.addTo(map);}
 if(layers.includes('ramps')){document.getElementById('ly_ramps').checked=true;rampLayer.addTo(map);loadRamps();}
+if(layers.includes('chart')){document.getElementById('ly_chart').checked=true;linzChart.addTo(map);chartBase(true);}
+if(layers.includes('bathy')){document.getElementById('ly_bathy').checked=true;gebco.addTo(map);}
 
 /* ---------- region segmented control ---------- */
 document.querySelectorAll('#regionSeg button').forEach(b=>{
@@ -1025,6 +1075,8 @@ function syncURL(){
     if(document.getElementById('ly_reserves').checked)ls.push('reserves');
     if(document.getElementById('ly_ramps').checked)ls.push('ramps');
     if(document.getElementById('ly_marks').checked)ls.push('tide_stations');
+    if(document.getElementById('ly_chart').checked)ls.push('chart');
+    if(document.getElementById('ly_bathy').checked)ls.push('bathy');
     const p=new URLSearchParams({lat:c.lat.toFixed(5),lng:c.lng.toFixed(5),zoom:map.getZoom(),layers:ls.join(',')||'none'});
     history.replaceState(null,'',location.pathname+'?'+p.toString());
   },350);
@@ -1101,7 +1153,10 @@ async function selectLocation(la,ln,name,region){
 
   document.getElementById('locName').textContent = name || placeName(la,ln);
   document.getElementById('locSub').textContent = `${la.toFixed(3)}, ${ln.toFixed(3)} · loading…`;
-  if(window.innerWidth<=720) panel.classList.add('open');
+  if(window.innerWidth<=720){
+    if(!name) setTimeout(()=>{ if(curLat===la && curLng===ln) panel.classList.add('open'); }, 900);  // custom tap: show the pin first
+    else panel.classList.add('open');
+  }
   toast('Loading conditions…',true);
 
   try{
@@ -1283,11 +1338,20 @@ function biteIndex(i){
   const score = 10*(0.28*tideS + 0.18*solS + 0.16*windS + 0.14*seaS + 0.12*presS + 0.12*lightS);
   return Math.max(1,Math.min(10,Math.round(score*10)/10));
 }
-function scoreColor(s){
-  if(s>=8)return getCSS('--gold'); if(s>=6)return getCSS('--grn');
-  if(s>=4)return getCSS('--lblue'); return getCSS('--red');
+function biteIndexAt(ms){
+  // smooth scrubbing: linearly interpolate the hourly bite index
+  let i=0; for(let k=0;k<DATA.t.length-1;k++){ if(DATA.t[k].getTime()<=ms) i=k; else break; }
+  if(i>=DATA.t.length-1) return biteIndex(i);
+  const a=DATA.t[i].getTime(), b=DATA.t[i+1].getTime();
+  const f=b>a?Math.max(0,Math.min(1,(ms-a)/(b-a))):0;
+  const va=biteIndex(i), vb=biteIndex(i+1);
+  return Math.max(1,Math.min(10, va+(vb-va)*f));
 }
-function scoreWord(s){return s>=8?'Prime time':s>=6?'Good window':s>=4?'Worth a look':'Tough going';}
+function scoreColor(s){
+  if(s>=7)return getCSS('--grn'); if(s>=5)return '#ECC233';   // green 7-10 · yellow 5-7 · red <5
+  return getCSS('--red');
+}
+function scoreWord(s){return s>=7?'Prime time':s>=5?'Worth a look':'Tough going';}  // aligned to colour bands 7 / 5
 function getCSS(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 
 /* ---------- Bite heatmap: colour the visible pins by their "now" bite index ---------- */
@@ -1325,9 +1389,9 @@ function visibleSpots(){
 async function fetchHeatChunk(chunk){
   const las=chunk.map(s=>s.lat.toFixed(4)).join(','), lns=chunk.map(s=>s.lng.toFixed(4)).join(',');
   const mURL=`https://marine-api.open-meteo.com/v1/marine?latitude=${las}&longitude=${lns}`+
-    `&hourly=sea_level_height_msl,wave_height&timezone=auto&forecast_days=2&length_unit=metric&cell_selection=sea`;
+    `&hourly=sea_level_height_msl,wave_height&timezone=auto&forecast_days=6&length_unit=metric&cell_selection=sea`;
   const wURL=`https://api.open-meteo.com/v1/forecast?latitude=${las}&longitude=${lns}`+
-    `&hourly=wind_speed_10m,pressure_msl&daily=sunrise,sunset&timezone=auto&forecast_days=2&wind_speed_unit=kn`;
+    `&hourly=wind_speed_10m,pressure_msl&daily=sunrise,sunset&timezone=auto&forecast_days=6&wind_speed_unit=kn`;
   const [mj,wj]=await Promise.all([omJSON(mURL),omJSON(wURL)]);
   return { chunk, mArr:Array.isArray(mj)?mj:[mj], wArr:Array.isArray(wj)?wj:[wj] };
 }
@@ -1413,28 +1477,32 @@ function renderForecast(){
   const byDay={}, order=[];
   for(let i=0;i<DATA.t.length;i++){
     const d=DATA.t[i], key=d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate(), b=biteIndex(i);
-    if(!byDay[key]){ byDay[key]={day:new Date(d.getFullYear(),d.getMonth(),d.getDate()),max:b,peakT:d,ssum:0,scnt:0}; order.push(byDay[key]); }
-    else if(b>byDay[key].max){ byDay[key].max=b; byDay[key].peakT=d; }
+    if(!byDay[key]){ byDay[key]={day:new Date(d.getFullYear(),d.getMonth(),d.getDate()),bsum:0,bcnt:0,max:-1,peakT:d,ssum:0,scnt:0}; order.push(byDay[key]); }
+    const o=byDay[key];
+    o.bsum+=b; o.bcnt++;
+    if(b>o.max){ o.max=b; o.peakT=d; }          // peak time kept for the day-jump
     const ss=seaState(DATA.wave[i]??DATA.swell[i]);
-    if(ss){ byDay[key].ssum+=ss.n; byDay[key].scnt++; }
+    if(ss){ o.ssum+=ss.n; o.scnt++; }
   }
   order.sort((a,z)=>a.day-z.day);
   const today=new Date(); today.setHours(0,0,0,0);
-  const seaCol = n => n<=3?'#E0452E':n<=6?'#ECC233':'#45B86A';
+  const seaCol = n => seaColor(n);
   const days5=order.slice(0,5);
+  const avgOf=o=>o.bcnt?o.bsum/o.bcnt:0;          // whole-day average conditions
   const seaOf=o=>o.scnt?Math.round(o.ssum/o.scnt):-1;
-  const maxBite=Math.max(...days5.map(o=>o.max));
-  const topB=days5.filter(o=>o.max===maxBite);
+  const maxBite=Math.max(...days5.map(avgOf));
+  const topB=days5.filter(o=>avgOf(o)===maxBite);
   const maxSea=Math.max(...topB.map(seaOf));
   host.innerHTML = days5.map(o=>{
-    const isBest = o.max===maxBite && seaOf(o)===maxSea;
+    const avg=avgOf(o);
+    const isBest = avgOf(o)===maxBite && seaOf(o)===maxSea;
     const lab = o.day.getTime()===today.getTime() ? 'Today' : o.day.toLocaleDateString([], {weekday:'short'});
     const sea = o.scnt ? Math.round(o.ssum/o.scnt) : null;
     const seaCell = sea!=null
       ? `<div class="fd-sea" style="color:${seaCol(sea)}">${sea}<span>sea</span></div>`
       : `<div class="fd-sea" style="color:var(--muted)">—<span>sea</span></div>`;
     return `<div class="fday${isBest?' best':''}" data-peak="${o.peakT.getTime()}"><div class="fd-day">${lab}</div>`+
-      `<div class="fd-score" style="color:${scoreColor(o.max)}">${o.max.toFixed(1)}</div>`+
+      `<div class="fd-score" style="color:${scoreColor(avg)}">${avg.toFixed(1)}</div>`+
       `<div class="fd-time">${fmtClock(o.peakT)}</div>`+seaCell+`</div>`;
   }).join('');
 }
@@ -1442,7 +1510,14 @@ function renderForecast(){
 /* ---------- render at scrubber index ---------- */
 function render(offsetSteps){
   if(!DATA)return;
-  // scrubber: 0..1440 steps of 5 min over 120h (5 days) ahead
+  // cap the scrubber to whole days (same midnight the chart ends on) — no partial extra day
+  const _baseT=DATA.t[baseIdx].getTime();
+  const _se=new Date(_baseT+120*3600000); _se.setHours(0,0,0,0);
+  const _maxSteps=Math.max(12,Math.round((_se.getTime()-_baseT)/300000));
+  const _sc=document.getElementById('scrubber');
+  if(_sc && +_sc.max!==_maxSteps) _sc.max=_maxSteps;
+  if(offsetSteps>_maxSteps){ offsetSteps=_maxSteps; if(_sc) _sc.value=_maxSteps; }
+  // scrubber: 5-min steps, capped to the last whole day ahead
   const minutesAhead=offsetSteps*5;
   const targetMs=DATA.t[baseIdx].getTime()+minutesAhead*60000;
   // nearest hourly index
@@ -1454,8 +1529,8 @@ function render(offsetSteps){
   document.getElementById('scrubTime').textContent = isNow?'Now':fmtClock(tDate);
   document.getElementById('scrubDay').textContent = isNow?fmtClock(new Date()):tDate.toLocaleDateString([], {weekday:'short',day:'numeric',month:'short'});
 
-  // bite index
-  const s=biteIndex(i);
+  // bite index (interpolated so the dial glides between hours while scrubbing)
+  const s=biteIndexAt(targetMs);
   const arc=document.getElementById('dialArc');
   const C=2*Math.PI*40;
   arc.style.strokeDashoffset=C*(1-s/10);
@@ -1524,7 +1599,7 @@ function render(offsetSteps){
   const seaVEl=document.getElementById('seaV');
   if(sst){
     seaVEl.textContent=sst.n;
-    seaVEl.style.color = sst.n<=3 ? '#E0452E' : sst.n<=6 ? '#ECC233' : '#45B86A';
+    seaVEl.style.color = seaColor(sst.n);
     document.getElementById('seaX').textContent=`${sst.word} · ${hs.toFixed(1)} m`;
   } else { seaVEl.textContent='—'; document.getElementById('seaX').textContent=''; }
 
@@ -1543,22 +1618,28 @@ function render(offsetSteps){
 }
 
 /* ---------- tide chart (SVG) ---------- */
+function swellColor(h){ if(h==null)return getCSS('--muted'); return h<=1.0?getCSS('--grn'):h<=2.0?'#ECC233':getCSS('--red'); }  // green <=1m, yellow 1-2m, red >2m
+function swellWord(h){ if(h==null)return ''; return h<=1.0?'good':h<=2.0?'workable':'too big'; }
+function windColor(kn){ if(kn==null)return getCSS('--muted'); return kn<=5?getCSS('--grn'):kn<=12?getCSS('--lblue'):kn<=20?'#ECC233':getCSS('--red'); }  // green<=5 glassy, blue<=12 good, yellow<=20 workable, red>20
+function windWord(kn){ if(kn==null)return ''; return kn<=5?'glassy':kn<=12?'good':kn<=20?'workable':'too windy'; }
+function seaColor(n){ if(n==null)return getCSS('--muted'); return n>=7?getCSS('--grn'):n>=5?'#ECC233':getCSS('--red'); }  // green 7-10, yellow 5-7, red <5
+function seaWord(n){ if(n==null)return ''; return n>=9?'calm':n>=7?'slight':n>=5?'moderate':'rough'; }
 const CHART_KEYS={
   tide:'Height above the forecast low tide · H / L = next highs & lows',
-  wind:'Wind speed (kn)',
-  swell:'Significant swell height (m)',
+  wind:'Wind speed · glassy (green) · good (blue) · workable (yellow) · too windy (red)',
+  swell:'Swell height · good (green) · workable (yellow) · too big (red)',
   sky:'<span><i style="background:rgba(248,193,30,.75)"></i>sun</span><span><i style="background:rgba(200,212,228,.6)"></i>cloud</span><span><i style="background:rgba(87,182,230,.85)"></i>rain</span><span><i style="background:#F8C11E"></i>temp</span>',
   sun:'Sun elevation above / below the dashed horizon',
-  sea:'Sea state 1–10 (10 = calm, 1 = very high)'
+  sea:'Sea state · calm/slight (green) · moderate (yellow) · rough (red)'
 };
 const METRICS={
   tide: {label:'Tide',      unit:' m',  color:'#57B6E6', hilo:true,      val:i=>DATA.sea[i]},
-  wind: {label:'Wind',      unit:' kn', color:'#8ec9ef',                 val:i=>DATA.wind[i]},
-  swell:{label:'Swell',     unit:' m',  color:'#6fcfbf',                 val:i=>(DATA.swell[i]!=null?DATA.swell[i]:DATA.wave[i])},
+  wind: {label:'Wind',      unit:' kn', color:'#8ec9ef', band:windColor, bands:[5,12,20], val:i=>DATA.wind[i]},
+  swell:{label:'Swell',     unit:' m',  color:'#6fcfbf', band:swellColor, bands:[1,2], val:i=>(DATA.swell[i]!=null?DATA.swell[i]:DATA.wave[i])},
   sky:  {label:'Weather',       unit:'\u00b0',   color:'#F8C11E',            weather:true, val:i=>DATA.temp[i]},
   sun:  {label:'Sun',       unit:'\u00b0',   color:'#ffd27a', horizon:true,
          val:i=>{ if(curLat==null)return null; const p=SunCalc.getSunPosition(DATA.t[i],curLat,curLng); return p?p.altitude*180/Math.PI:null; }},
-  sea:  {label:'Sea State', unit:'/10', color:'#45B86A', yFix:[0.4,10.6],
+  sea:  {label:'Sea State', unit:'/10', color:'#45B86A', band:seaColor, bands:[5,7], yFix:[0.4,10.6],
          val:i=>{ const s=seaState(DATA.wave[i]!=null?DATA.wave[i]:DATA.swell[i]); return s?s.n:null; }}
 };
 function updateChartCap(m,val,ti){
@@ -1569,7 +1650,8 @@ function updateChartCap(m,val,ti){
   el.style.color=m.color;
   if(chartMetric==='wind'){
     const dir=DATA.windDir[ti], gust=DATA.gust[ti];
-    let s=Math.round(val)+' kn';
+    el.style.color=windColor(val);
+    let s=Math.round(val)+' kn · '+windWord(val);
     if(dir!=null) s+=` <span style="display:inline-block;transform:rotate(${dir+180}deg)">↑</span> ${compass(dir)}`;
     if(gust!=null) s+=` · gust ${Math.round(gust)}`;
     el.innerHTML=s;
@@ -1580,6 +1662,12 @@ function updateChartCap(m,val,ti){
   } else {
     el.textContent = (chartMetric==='tide'||chartMetric==='swell') ? val.toFixed(1)+m.unit : Math.round(val)+m.unit;
   }
+  if(chartMetric==='swell'){
+    el.style.color=swellColor(val); el.textContent = val.toFixed(1)+' m · '+swellWord(val);
+  }
+  if(chartMetric==='sea'){
+    el.style.color=seaColor(val); el.textContent = Math.round(val)+'/10 · '+seaWord(val);
+  }
 }
 function drawMetric(curIdx,targetMs){
   const m=METRICS[chartMetric]||METRICS.tide;
@@ -1588,7 +1676,9 @@ function drawMetric(curIdx,targetMs){
   const H=Math.max(96,Math.round(svg.getBoundingClientRect().height)||110);
   svg.setAttribute("viewBox","0 0 "+W+" "+H);
   const startMs=DATA.t[baseIdx].getTime()-6*3600000;
-  const endMs=DATA.t[baseIdx].getTime()+120*3600000;  // 5 days ahead
+  const rawEnd=DATA.t[baseIdx].getTime()+120*3600000;        // up to 5 days ahead
+  const _ed=new Date(rawEnd); _ed.setHours(0,0,0,0);          // snap to midnight so the chart ends on a whole day
+  const endMs=_ed.getTime();
   const pts=[];
   for(let i=0;i<DATA.t.length;i++){
     const tm=DATA.t[i].getTime();
@@ -1633,13 +1723,15 @@ function drawMetric(curIdx,targetMs){
   let ticks='';
   for(let i=0;i<DATA.t.length;i++){ const tm=DATA.t[i].getTime(); if(tm<startMs||tm>endMs)continue; const hr=DATA.t[i].getHours();
     if(hr%6===0){ const x=X(tm); ticks+=`<line x1="${x}" y1="${padT}" x2="${x}" y2="${H-padB}" stroke="rgba(255,255,255,.05)"/>`; }
-    if(hr===0){ const x=X(tm); ticks+=`<text x="${x}" y="${H-6}" fill="#9fb0c4" font-size="8.5" text-anchor="middle" font-family="Spline Sans Mono">${DATA.t[i].toLocaleDateString([],{weekday:'short'})}</text>`; }
+    if(hr===0){ const x=X(tm); ticks+=`<line x1="${x}" y1="${H-padB}" x2="${x}" y2="${H-2}" stroke="rgba(255,255,255,.32)" stroke-width="1"/>`; }       // day boundary
+    if(hr===12){ const x=X(tm); ticks+=`<text x="${x}" y="${H-6}" fill="#9fb0c4" font-size="8.5" text-anchor="middle" font-family="Spline Sans Mono">${DATA.t[i].toLocaleDateString([],{weekday:'short'})}</text>`; }
   }
   let extra='';
   if(m.hilo){ DATA.extremes.forEach(e=>{ const tm=e.t.getTime(); if(tm<startMs||tm>endMs)return; const x=X(tm),y=Y(e.v);
       extra+=`<circle cx="${x}" cy="${y}" r="2.6" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}"/>`;
       extra+=`<text x="${x}" y="${y-6}" fill="${e.type==='H'?'#F8C11E':'#CCCCCC'}" font-size="8" text-anchor="middle" font-family="Spline Sans Mono">${e.type}</text>`; }); }
   if(m.horizon){ const hy=Y(0); extra+=`<line x1="${padL}" y1="${hy}" x2="${W-padR}" y2="${hy}" stroke="rgba(255,255,255,.28)" stroke-dasharray="3 3"/>`; }
+  if(m.band){ (m.bands||[]).forEach(th=>{ if(th>vMin&&th<vMax){ const y=Y(th); extra+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,.1)" stroke-dasharray="2 4"/>`; } }); }
   const nowX=X(DATA.t[baseIdx].getTime());
   const tgt=Math.max(startMs,Math.min(endMs,targetMs));
   const tgtX=X(tgt);
@@ -1648,6 +1740,17 @@ function drawMetric(curIdx,targetMs){
     if(tgt>=a&&tgt<=b&&va!=null&&vb!=null){ val=va+(vb-va)*((tgt-a)/(b-a)); break; } }
   if(val==null)val=(m.val(curIdx)!=null?m.val(curIdx):pts[0].v);
   const tgtY=Y(val);
+  const mk = m.band ? m.band(val) : m.color;
+  let lineSvg;
+  if(m.band){
+    lineSvg='';
+    for(let k=0;k<pts.length-1;k++){
+      const c=m.band((pts[k].v+pts[k+1].v)/2);
+      lineSvg+=`<line x1="${X(pts[k].tm).toFixed(1)}" y1="${Y(pts[k].v).toFixed(1)}" x2="${X(pts[k+1].tm).toFixed(1)}" y2="${Y(pts[k+1].v).toFixed(1)}" stroke="${c}" stroke-width="2.2" stroke-linecap="round"/>`;
+    }
+  } else {
+    lineSvg=`<path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" stroke-linejoin="round"/>`;
+  }
   const gid='grad_'+chartMetric;
   svg.innerHTML=`
     <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
@@ -1656,19 +1759,20 @@ function drawMetric(curIdx,targetMs){
     ${ticks}
     ${pre}
     ${area?`<path d="${area}" fill="url(#${gid})"/>`:''}
-    <path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" stroke-linejoin="round"/>
+    ${lineSvg}
     ${extra}
     <line x1="${nowX}" y1="${padT-4}" x2="${nowX}" y2="${H-padB}" stroke="rgba(255,255,255,.45)" stroke-dasharray="2 3"/>
     <text x="${nowX}" y="${padT-6}" fill="#ffffff" font-size="8" text-anchor="middle" font-family="Spline Sans Mono">now</text>
-    <line x1="${tgtX}" y1="${padT-4}" x2="${tgtX}" y2="${H-padB}" stroke="${m.color}" stroke-width="1.4"/>
-    <circle cx="${tgtX}" cy="${tgtY}" r="4" fill="#ffffff" stroke="${m.color}" stroke-width="2"/>
+    <line x1="${tgtX}" y1="${padT-4}" x2="${tgtX}" y2="${H-padB}" stroke="${mk}" stroke-width="1.4"/>
+    <circle cx="${tgtX}" cy="${tgtY}" r="4" fill="#ffffff" stroke="${mk}" stroke-width="2"/>
   `;
   updateChartCap(m, chartMetric==='tide'?(val-(DATA._seaDatum||0)):val, curIdx);
 }
 
 /* ---------- scrubber ---------- */
 const scrubber=document.getElementById('scrubber');
-scrubber.addEventListener('input',()=>render(parseInt(scrubber.value)));
+let _scrubRAF=null;
+scrubber.addEventListener('input',()=>{ if(_scrubRAF)return; _scrubRAF=requestAnimationFrame(()=>{ _scrubRAF=null; render(parseInt(scrubber.value)); }); });
 document.getElementById('scrubReset').addEventListener('click',()=>{scrubber.value=0;render(0);});
 // redraw the tide chart once it actually has its width (fixes the initial compressed render)
 let _tideT;
